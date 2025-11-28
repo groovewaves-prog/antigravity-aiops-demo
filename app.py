@@ -1,21 +1,15 @@
 import streamlit as st
 import graphviz
-import time
 import os
-import anthropic
+import google.generativeai as genai
 
 # 既存のロジックをインポート
 from data import TOPOLOGY, SOPS
 from logic import CausalInferenceEngine, Alarm
 
-# --- 設定 ---
-st.set_page_config(
-    page_title="Autonomous AIOps Agent",
-    page_icon="🤖",
-    layout="wide"
-)
+st.set_page_config(page_title="AIOps Agent (Gemini Flash)", page_icon="⚡", layout="wide")
 
-# --- 関数: トポロジー図の生成 (変更なし) ---
+# --- 関数: トポロジー図の生成 ---
 def render_topology(alarms, root_cause_node):
     graph = graphviz.Digraph()
     graph.attr(rankdir='TB')
@@ -30,11 +24,11 @@ def render_topology(alarms, root_cause_node):
         label = f"{node_id}\n({node.type})"
         
         if root_cause_node and node_id == root_cause_node.id:
-            color = "#ffcdd2" # Root Cause (Red)
+            color = "#ffcdd2" # Root Cause Red
             penwidth = "3"
             label += "\n[ROOT CAUSE]"
         elif node_id in alarmed_ids:
-            color = "#fff9c4" # Alarm (Yellow)
+            color = "#fff9c4" # Alarm Yellow
         
         graph.node(node_id, label=label, fillcolor=color, color='black', penwidth=penwidth, fontcolor=fontcolor)
     
@@ -44,101 +38,105 @@ def render_topology(alarms, root_cause_node):
             
     return graph
 
-# --- 関数: AIレポート生成 (Claude対応版) ---
-def generate_claude_response(inference_result, sop_text, api_key):
+# --- 関数: Gemini Flash レポート生成 (安定化設定済み) ---
+def generate_gemini_response(inference_result, sop_text, api_key):
     if not api_key:
-        return "⚠️ API Key not found. Please set ANTHROPIC_API_KEY."
+        return "⚠️ API Key not found."
     
     try:
-        client = anthropic.Anthropic(api_key=api_key)
+        genai.configure(api_key=api_key)
+        
+        # 設定: 温度を0にして回答を固定化
+        generation_config = {
+            "temperature": 0.0,
+            "max_output_tokens": 1000,
+        }
+
+        # モデル初期化 (Flashモデル)
+        model = genai.GenerativeModel(
+            model_name='gemini-2.0-flash',
+            generation_config=generation_config
+        )
         
         prompt = f"""
-        あなたは自律型AIOpsダッシュボードのAIオペレータです。
-        以下の障害分析結果に基づき、運用チームへのチャットメッセージを作成してください。
+        あなたはAIOpsダッシュボードのAIオペレータです。
+        以下の障害情報に基づき、運用チームへレポートしてください。
         
         **根本原因**: {inference_result.root_cause_reason}
         **推奨SOP**: {sop_text}
         
         要件:
-        1. 緊急度を絵文字で表現してください (🚨, ⚠️, 👻 など)。
-        2. 状況を簡潔に説明してください。
-        3. 「参照すべきSOP」を明確なリンク形式または太字で提示してください。
-        4. マークダウンで見やすく整形してください。
+        1. 緊急度を絵文字で表現 (🚨, ⚠️)。
+        2. 状況を簡潔に要約。
+        3. 「参照SOP」を明確に提示。
+        4. Markdown形式。
         """
         
-        message = client.messages.create(
-            model="claude-3-5-sonnet-20241022", # 最新のSonnetを使用
-            max_tokens=1000,
-            temperature=0.7,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
-        return message.content[0].text
+        response = model.generate_content(prompt)
         
+        # 安全フィルター判定
+        if response.parts:
+            return response.text
+        else:
+            # ブロックされた場合のフォールバック
+            return f"⚠️ Response blocked by safety filters. Reason: {response.prompt_feedback}"
+            
     except Exception as e:
-        return f"Error connecting to Claude API: {e}"
+        return f"Gemini API Error: {e}"
 
 # --- UI構築 ---
+st.title("⚡ AIOps Agent (Gemini Flash Edition)")
+st.markdown("Powered by **Metadata Inference** & **Google Gemini 1.5 Flash**")
 
-st.title("🤖 Autonomous AIOps Dashboard")
-st.markdown("Metadata-Driven Causal Inference & Claude 4.5 Sonnet")
-
-# APIキー取得ロジック (Secrets優先)
+# APIキー取得 (Secrets優先 -> 環境変数 -> 手動入力)
 api_key = None
-if "ANTHROPIC_API_KEY" in st.secrets:
-    api_key = st.secrets["ANTHROPIC_API_KEY"]
+if "GOOGLE_API_KEY" in st.secrets:
+    api_key = st.secrets["GOOGLE_API_KEY"]
 else:
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    api_key = os.environ.get("GOOGLE_API_KEY")
 
-# サイドバー
 with st.sidebar:
-    st.header("⚡ Fault Injection (障害注入)")
-    scenario = st.radio(
-        "発生させる障害シナリオを選択:",
-        ("正常稼働 (Normal)", "1. WAN全回線断", "2. FW片系障害", "3. L2SWサイレント障害")
-    )
+    st.header("⚡ Fault Injection")
+    scenario = st.radio("Select Scenario:", ("Normal", "1. WAN Failure", "2. FW Failover", "3. L2 Silent Failure"))
+    
     st.markdown("---")
     if api_key:
-        st.success("🟢 AI Core Connected")
+        st.success("API Connected")
     else:
-        st.warning("🔴 API Key Missing")
-        # ローカル動作確認用に手動入力欄を表示
-        user_input_key = st.text_input("Enter Claude API Key", type="password")
-        if user_input_key:
-            api_key = user_input_key
+        st.warning("API Key Missing")
+        user_key = st.text_input("Google API Key", type="password")
+        if user_key: api_key = user_key
 
-# メインロジック
 alarms = []
 root_cause = None
 
-if scenario == "1. WAN全回線断":
+# シナリオ分岐
+if scenario == "1. WAN Failure":
     alarms = [
         Alarm("WAN_ROUTER_01", "Interface Down", "CRITICAL"),
         Alarm("FW_01_PRIMARY", "Gateway Unreachable", "WARNING"),
         Alarm("FW_01_SECONDARY", "Gateway Unreachable", "WARNING"),
         Alarm("CORE_SW_01", "Uplink Down", "WARNING"),
-        Alarm("AP_01", "Controller Unreachable", "CRITICAL")
+        Alarm("AP_01", "Unreachable", "CRITICAL")
     ]
-elif scenario == "2. FW片系障害":
+elif scenario == "2. FW Failover":
     alarms = [
         Alarm("FW_01_PRIMARY", "Heartbeat Loss", "WARNING"),
         Alarm("FW_01_PRIMARY", "System Crash", "CRITICAL")
     ]
-elif scenario == "3. L2SWサイレント障害":
+elif scenario == "3. L2 Silent Failure":
     alarms = [
         Alarm("AP_01", "Connection Lost", "CRITICAL"),
         Alarm("AP_02", "Connection Lost", "CRITICAL")
     ]
 
-# 推論実行
+# 推論エンジン実行
 engine = CausalInferenceEngine(TOPOLOGY)
 inference_result = engine.analyze_alarms(alarms)
 root_cause = inference_result.root_cause_node
-sop_key = inference_result.sop_key
-sop_text = SOPS.get(sop_key, "")
+sop_text = SOPS.get(inference_result.sop_key, "")
 
-# 画面レイアウト
+# レイアウト描画
 col1, col2 = st.columns([1, 1])
 
 with col1:
@@ -148,24 +146,19 @@ with col1:
     
     if root_cause:
         st.error(f"🚨 Root Cause: **{root_cause.id}**")
-        st.info(f"Reason: {inference_result.root_cause_reason}")
+        st.caption(f"Reason: {inference_result.root_cause_reason}")
     else:
         st.success("✅ System Normal")
 
 with col2:
-    st.subheader("💬 AI Analyst Report")
-    
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-        st.session_state.messages.append({"role": "assistant", "content": "System monitoring started."})
-
-    if scenario != "正常稼働 (Normal)":
-        with st.chat_message("assistant", avatar="🤖"):
-            with st.spinner("Claude is analyzing..."):
-                if api_key:
-                    response = generate_claude_response(inference_result, sop_text, api_key)
-                    st.markdown(response)
-                else:
-                    st.error("API Keyが必要です。")
+    st.subheader("🤖 AI Analyst Report")
+    if scenario != "Normal":
+        with st.chat_message("assistant", avatar="⚡"):
+            if api_key:
+                with st.spinner("Gemini is analyzing causality..."):
+                    report = generate_gemini_response(inference_result, sop_text, api_key)
+                    st.markdown(report)
+            else:
+                st.error("Please set GOOGLE_API_KEY to see the AI report.")
     else:
-        st.info("No active incidents.")
+        st.info("No active incidents. System is healthy.")
