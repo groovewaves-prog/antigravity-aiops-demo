@@ -7,12 +7,19 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.markdown import Markdown
 
-from data import TOPOLOGY, SOPS
+from data import TOPOLOGY
 from logic import CausalInferenceEngine, Alarm
 
 console = Console()
 
-def generate_report(inference_result, sop_text):
+def load_config_by_id(device_id):
+    path = f"configs/{device_id}.txt"
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    return None
+
+def generate_report(inference_result):
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
         return "⚠️ API Key not set."
@@ -20,37 +27,31 @@ def generate_report(inference_result, sop_text):
     try:
         genai.configure(api_key=api_key)
         
-        # 安定化設定
-        generation_config = {
-            "temperature": 0.0,
-            "max_output_tokens": 1000,
-        }
+        generation_config = {"temperature": 0.0, "max_output_tokens": 1000}
+        model = genai.GenerativeModel('gemini-2.0-flash', generation_config=generation_config)
         
-        model = genai.GenerativeModel(
-            model_name='gemini-2.0-flash',
-            generation_config=generation_config
-        )
+        root = inference_result.root_cause_node
+        config = load_config_by_id(root.id)
         
         prompt = f"""
         障害レポートを作成してください。
-        根本原因: {inference_result.root_cause_reason}
-        SOP: {sop_text}
+        原因: {inference_result.root_cause_reason}
+        機器: {root.id}
         """
         
-        response = model.generate_content(prompt)
-        
-        if response.parts:
-            return response.text
+        if config:
+            prompt += f"\nConfig:\n{config}\nConfigに基づいた具体的な手順を提示してください。"
         else:
-            return f"⚠️ Blocked: {response.prompt_feedback}"
+            prompt += "\n一般的な復旧手順を提示してください。"
             
+        response = model.generate_content(prompt)
+        return response.text
     except Exception as e:
         return f"Error: {e}"
 
 def run_scenario(scenario_id):
     engine = CausalInferenceEngine(TOPOLOGY)
     alarms = []
-    
     if scenario_id == "1":
         alarms = [Alarm("WAN_ROUTER_01", "Down", "CRITICAL")]
     elif scenario_id == "2":
@@ -58,25 +59,20 @@ def run_scenario(scenario_id):
     elif scenario_id == "3":
         alarms = [Alarm("AP_01", "Down", "CRITICAL"), Alarm("AP_02", "Down", "CRITICAL")]
     else:
-        console.print("[red]Invalid Selection[/red]")
         return
-        
+
     result = engine.analyze_alarms(alarms)
-    sop = SOPS.get(result.sop_key, "")
+    console.print(f"[green]Root Cause: {result.root_cause_reason}[/green]")
     
-    console.print(f"[green]Root Cause Identified: {result.root_cause_reason}[/green]")
-    
-    console.print("[yellow]Gemini Flash is generating report...[/yellow]")
-    report = generate_report(result, sop)
-    console.print(Panel(Markdown(report), title="Gemini 2.0 Flash Report", border_style="blue"))
+    console.print("[yellow]Gemini 2.0 Flash Generating Report...[/yellow]")
+    report = generate_report(result)
+    console.print(Panel(Markdown(report), title="Gemini Report", border_style="blue"))
 
 def main():
     while True:
-        console.print("\n1: WAN, 2: FW, 3: Silent L2, q: Quit")
-        c = Prompt.ask("Select Scenario", default="1")
+        c = Prompt.ask("Select (1, 2, 3, q)", default="1")
         if c == "q": break
         run_scenario(c)
 
 if __name__ == "__main__":
     main()
-
