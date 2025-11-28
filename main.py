@@ -42,7 +42,7 @@ def generate_ai_report(inference_result, sop_content):
     """
     Geminiを使用して自然言語レポートを生成します。
     """
-    model = genai.GenerativeModel('gemini-1.5-pro')
+    model = genai.GenerativeModel('gemini-3-pro-preview')
     
     prompt = f"""
     あなたは「Antigravity Agent」、高度なAIOpsアシスタントです。
@@ -159,4 +159,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
