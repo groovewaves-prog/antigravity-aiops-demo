@@ -76,7 +76,7 @@ def generate_ai_report(inference_result, sop_content, api_key):
             progress.add_task(description="[purple]Claude is thinking...[/purple]", total=None)
             
             message = client.messages.create(
-                model="claude-4-5-sonnet-20250930",
+                model="claude-3-5-sonnet-20241022",
                 max_tokens=1000,
                 temperature=0.7,
                 messages=[
@@ -165,4 +165,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
