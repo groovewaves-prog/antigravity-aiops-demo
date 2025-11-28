@@ -82,7 +82,7 @@ def generate_claude_response(inference_result, sop_text, api_key):
 # --- UI構築 ---
 
 st.title("🤖 Autonomous AIOps Dashboard")
-st.markdown("Metadata-Driven Causal Inference & Claude 3.5 Sonnet")
+st.markdown("Metadata-Driven Causal Inference & Claude 4.5 Sonnet")
 
 # APIキー取得ロジック (Secrets優先)
 api_key = None
