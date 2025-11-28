@@ -86,7 +86,7 @@ def generate_gemini_response(inference_result, sop_text, api_key):
 
 # --- UI構築 ---
 st.title("⚡ AIOps Agent (Gemini Flash Edition)")
-st.markdown("Powered by **Metadata Inference** & **Google Gemini 1.5 Flash**")
+st.markdown("Powered by **Metadata Inference** & **Google Gemini 2.0 Flash**")
 
 # APIキー取得 (Secrets優先 -> 環境変数 -> 手動入力)
 api_key = None
