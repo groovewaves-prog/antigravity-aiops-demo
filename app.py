@@ -67,7 +67,7 @@ def generate_claude_response(inference_result, sop_text, api_key):
         """
         
         message = client.messages.create(
-            model="claude-3-5-sonnet-latest", # 最新のSonnetを使用
+            model="claude-4-5-sonnet-20250930", # 最新のSonnetを使用
             max_tokens=1000,
             temperature=0.7,
             messages=[
