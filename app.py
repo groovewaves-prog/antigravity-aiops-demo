@@ -62,7 +62,7 @@ def generate_gemini_response(inference_result, sop_text, api_key):
         return "⚠️ API Key not found. Please set GOOGLE_API_KEY."
     
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-pro')
+    model = genai.GenerativeModel('gemini-3-pro-preview')
     
     prompt = f"""
     あなたはGoogle Antigravity DashboardのAIオペレータです。
