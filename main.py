@@ -68,7 +68,7 @@ def run_scenario(scenario_id):
     
     console.print("[yellow]Gemini Flash is generating report...[/yellow]")
     report = generate_report(result, sop)
-    console.print(Panel(Markdown(report), title="Gemini 1.5 Flash Report", border_style="blue"))
+    console.print(Panel(Markdown(report), title="Gemini 2.0 Flash Report", border_style="blue"))
 
 def main():
     while True:
@@ -79,3 +79,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
