@@ -96,8 +96,8 @@ else:
     api_key = os.environ.get("GOOGLE_API_KEY")
 
 with st.sidebar:
-    st.header("⚡ Fault Injection")
-    scenario = st.radio("Select Scenario:", ("Normal", "1. WAN Failure", "2. FW Failover", "3. L2 Silent Failure"))
+    st.header("⚡ 障害注入テスト")
+    scenario = st.radio("障害シナリオを選択:", ("正常稼働", "1. WAN全回線断", "2. FW片系障害", "3. L2SWサイレント障害"))
     
     st.markdown("---")
     if api_key:
@@ -111,7 +111,7 @@ alarms = []
 root_cause = None
 
 # シナリオ分岐
-if scenario == "1. WAN Failure":
+if scenario == "1. WAN全回線断":
     alarms = [
         Alarm("WAN_ROUTER_01", "Interface Down", "CRITICAL"),
         Alarm("FW_01_PRIMARY", "Gateway Unreachable", "WARNING"),
@@ -119,12 +119,12 @@ if scenario == "1. WAN Failure":
         Alarm("CORE_SW_01", "Uplink Down", "WARNING"),
         Alarm("AP_01", "Unreachable", "CRITICAL")
     ]
-elif scenario == "2. FW Failover":
+elif scenario == "2. FW片系障害":
     alarms = [
         Alarm("FW_01_PRIMARY", "Heartbeat Loss", "WARNING"),
         Alarm("FW_01_PRIMARY", "System Crash", "CRITICAL")
     ]
-elif scenario == "3. L2 Silent Failure":
+elif scenario == "3. L2SWサイレント障害":
     alarms = [
         Alarm("AP_01", "Connection Lost", "CRITICAL"),
         Alarm("AP_02", "Connection Lost", "CRITICAL")
