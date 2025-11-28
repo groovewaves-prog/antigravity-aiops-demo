@@ -101,4 +101,66 @@ with st.sidebar:
     
     st.markdown("---")
     if api_key:
-        st.success("API
+        st.success("API Connected")
+    else:
+        st.warning("API Key Missing")
+        user_key = st.text_input("Google API Key", type="password")
+        if user_key: api_key = user_key
+
+alarms = []
+root_cause = None
+
+# シナリオ分岐
+if scenario == "1. WAN全回線断":
+    alarms = [
+        Alarm("WAN_ROUTER_01", "Interface Down", "CRITICAL"),
+        Alarm("FW_01_PRIMARY", "Gateway Unreachable", "WARNING"),
+        Alarm("FW_01_SECONDARY", "Gateway Unreachable", "WARNING"),
+        Alarm("CORE_SW_01", "Uplink Down", "WARNING"),
+        Alarm("AP_01", "Unreachable", "CRITICAL")
+    ]
+elif scenario == "2. FW片系障害":
+    alarms = [
+        Alarm("FW_01_PRIMARY", "Heartbeat Loss", "WARNING"),
+        Alarm("FW_01_PRIMARY", "System Crash", "CRITICAL")
+    ]
+elif scenario == "3. L2SWサイレント障害":
+    alarms = [
+        Alarm("AP_01", "Connection Lost", "CRITICAL"),
+        Alarm("AP_02", "Connection Lost", "CRITICAL")
+    ]
+
+# 推論エンジン実行
+engine = CausalInferenceEngine(TOPOLOGY)
+inference_result = engine.analyze_alarms(alarms)
+root_cause = inference_result.root_cause_node
+sop_text = SOPS.get(inference_result.sop_key, "")
+
+# レイアウト描画
+col1, col2 = st.columns([1, 1])
+
+with col1:
+    st.subheader("🌐 Network Topology")
+    graph = render_topology(alarms, root_cause)
+    st.graphviz_chart(graph, use_container_width=True)
+    
+    if root_cause:
+        st.error(f"🚨 Root Cause: **{root_cause.id}**")
+        st.caption(f"Reason: {inference_result.root_cause_reason}")
+    else:
+        st.success("✅ System Normal")
+
+with col2:
+    st.subheader("🤖 AI Analyst Report")
+    
+    # 【修正箇所】ここで日本語の「正常稼働」と比較するように変更しました
+    if scenario != "正常稼働":
+        with st.chat_message("assistant", avatar="⚡"):
+            if api_key:
+                with st.spinner("Gemini is analyzing causality..."):
+                    report = generate_gemini_response(inference_result, sop_text, api_key)
+                    st.markdown(report)
+            else:
+                st.error("Please set GOOGLE_API_KEY to see the AI report.")
+    else:
+        st.info("No active incidents. System is healthy.")
