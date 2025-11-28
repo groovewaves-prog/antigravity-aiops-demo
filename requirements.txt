@@ -1,4 +1,4 @@
 streamlit
 graphviz
 rich
-anthropic
+google-generativeai
