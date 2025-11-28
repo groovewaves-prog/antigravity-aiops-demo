@@ -17,6 +17,7 @@ def render_topology(alarms, root_cause_node):
     
     alarmed_ids = {a.device_id for a in alarms}
     
+    # ノードを描画
     for node_id, node in TOPOLOGY.items():
         color = "#e8f5e9" # Default Green
         penwidth = "1"
@@ -32,9 +33,23 @@ def render_topology(alarms, root_cause_node):
         
         graph.node(node_id, label=label, fillcolor=color, color='black', penwidth=penwidth, fontcolor=fontcolor)
     
+    # エッジ（接続線）を描画
     for node_id, node in TOPOLOGY.items():
         if node.parent_id:
+            # 1. 本来の親からの接続
             graph.edge(node.parent_id, node_id)
+            
+            # 2. 【追加ロジック】親が冗長グループに属している場合、相方からも線を引く
+            parent_node = TOPOLOGY.get(node.parent_id)
+            if parent_node and parent_node.redundancy_group:
+                # 同じ冗長グループに属する他のノードを探す
+                partners = [
+                    n.id for n in TOPOLOGY.values() 
+                    if n.redundancy_group == parent_node.redundancy_group and n.id != parent_node.id
+                ]
+                # 相方からの線も引く（点線などで区別せず実線で引くことでActive/ActiveまたはStandby接続を表現）
+                for partner_id in partners:
+                    graph.edge(partner_id, node_id)
             
     return graph
 
