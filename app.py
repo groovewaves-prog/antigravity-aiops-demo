@@ -122,9 +122,8 @@ if alarms:
 # --- 画面レイアウト ---
 col1, col2 = st.columns([1, 1])
 
-# 左：トポロジー図
 with col1:
-    st.subheader("Network Topology")
+    st.subheader("🌐 Network Topology")
     st.graphviz_chart(render_topology(alarms, root_cause), use_container_width=True)
     if root_cause:
         st.markdown(
@@ -135,7 +134,7 @@ with col1:
         )
         st.caption(f"理由: {inference_result.root_cause_reason}")
 
-# 右：チャットインターフェース
+# 右：チャットインターフェース (スクロール対応版)
 with col2:
     st.subheader("AI Operator Chat")
 
@@ -143,21 +142,22 @@ with col2:
         st.error("APIキーを設定してください")
         st.stop()
 
+    # --- チャット表示用の固定コンテナを作成 (高さ600pxでスクロール) ---
+    chat_container = st.container(height=600)
+
+    # Gemini初期化 (初回のみ)
     if st.session_state.chat_session is None and selected_scenario != "正常稼働":
         genai.configure(api_key=api_key)
         
-        # Gemini 2.0 Flash 設定 (安定出力)
         generation_config = {
             "temperature": 0.0,
             "max_output_tokens": 1000,
         }
         model = genai.GenerativeModel("gemini-2.0-flash", generation_config=generation_config)
         
-        # Configファイルの自動読み込み (IDベース)
         device_id = root_cause.id
         config_content = load_config_by_id(device_id)
         
-        # システムプロンプト構築
         system_prompt = f"""
         あなたはネットワーク運用のエキスパートAIです。
         現在、以下の障害が発生しています。Config情報がある場合はそれを踏まえて、エンジニアと対話しながら復旧を支援してください。
@@ -183,7 +183,6 @@ with col2:
 
         system_prompt += "\n最初のメッセージとして、状況の要約と、Configの有無に基づいた具体的なネクストアクションを提示してください。"
 
-        # チャット開始
         history = [{"role": "user", "parts": [system_prompt]}]
         chat = model.start_chat(history=history)
         
@@ -194,23 +193,29 @@ with col2:
         except Exception as e:
             st.error(f"Error: {e}")
 
-    # チャット履歴表示
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+    # --- コンテナの中にメッセージを表示 ---
+    with chat_container:
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
 
-    # 入力エリア
+    # --- 入力欄 (コンテナの外に置くことで固定化) ---
     if prompt := st.chat_input("AIエージェントに指示..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+        
+        # ユーザーの入力をコンテナ内に即時反映
+        with chat_container:
+            with st.chat_message("user"):
+                st.markdown(prompt)
 
         if st.session_state.chat_session:
-            with st.chat_message("assistant"):
-                with st.spinner("Thinking..."):
-                    try:
-                        response = st.session_state.chat_session.send_message(prompt)
-                        st.markdown(response.text)
-                        st.session_state.messages.append({"role": "assistant", "content": response.text})
-                    except Exception as e:
-                        st.error(f"Error: {e}")
+            # AIの回答処理
+            with chat_container: # 回答もコンテナ内に表示
+                with st.chat_message("assistant"):
+                    with st.spinner("Thinking..."):
+                        try:
+                            response = st.session_state.chat_session.send_message(prompt)
+                            st.markdown(response.text)
+                            st.session_state.messages.append({"role": "assistant", "content": response.text})
+                        except Exception as e:
+                            st.error(f"Error: {e}")
